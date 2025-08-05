@@ -22,7 +22,21 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
           token: ${{ steps.app-token.outputs.token }}
+
+      - name: Ensure tags are available
+        run: |
+          # Force fetch all tags
+          git fetch --tags --force
+
+          # Verify tags are available
+          echo "Available tags:"
+          git tag -l
+
+          # Show the latest tag
+          echo "Latest tag:"
+          git describe --tags --abbrev=0 || echo "No tags found"
 
       - name: Bump version and create tag
         env:
@@ -48,5 +62,4 @@ jobs:
 
           # Push new tag if different
           if [ "$current_tag" != "$new_tag" ] && [ -n "$new_tag" ]; then
-            git push origin $new_tag
-          fi
+            git push
