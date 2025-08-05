@@ -27,6 +27,7 @@ jobs:
 
       - name: Configure git
         run: |
+          # Important change
           git config user.name 'your-app-name[bot]'
           git config user.email 'your-app-id+your-app-name[bot]@users.noreply.github.com'
 
