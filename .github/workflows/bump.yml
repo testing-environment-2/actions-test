@@ -2,16 +2,15 @@ name: Bump semver git tag
 
 on:
   push:
-    branches:
-      - main
-    tags-ignore:
-      - '**'
 
 jobs:
   bump_semver_git_tag:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/cocogitto/cog:latest
+    env:
+      GIT_PAGER: cat  # Disable pager globally
+      PAGER: cat
 
     steps:
       - name: Set up access token
@@ -29,19 +28,6 @@ jobs:
           fetch-tags: true
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Ensure tags are available
-        run: |
-          # Force fetch all tags
-          git fetch --tags --force
-
-          # Verify tags are available
-          echo "Available tags:"
-          git tag -l
-
-          # Show the latest tag
-          echo "Latest tag:"
-          git describe --tags --abbrev=0 || echo "No tags found"
-
       - name: Bump version and create tag
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -50,40 +36,21 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Debug: Check git status and configuration
-          echo "=== Git Status ==="
-          git status
-
-          echo "=== Current branch/ref ==="
-          git branch -v
-          git symbolic-ref -q HEAD || git describe --tags --exact-match
-
-          echo "=== All tags ==="
-          git tag -l
-
-          echo "=== Git log with tags ==="
-          git log --oneline --decorate --tags -n 10
-
-          echo "=== Describe output ==="
-          git describe --tags --always
-
-          echo "=== Git remote ==="
-          git remote -v
-
-          # Set remote URL BEFORE running cog
           git remote set-url origin https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/tunedd/${{ github.event.repository.name }}.git
 
-          # Debug: Check if cog can see the repository properly
-          echo "=== Cog version ==="
-          cog --version
+          # Get current tag
+          current_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
-          echo "=== Trying cog log ==="
-          cog log || echo "Cog log failed"
-
-          # Try running cog check without --from-latest-tag first
-          echo "=== Trying cog check without flags ==="
-          cog check || echo "Basic cog check failed"
-
-          # Now try with from-latest-tag
-          echo "=== Trying cog check --from-latest-tag ==="
+          # Run cog check from latest tag
           cog check --from-latest-tag
+
+          # Bump version
+          cog bump --auto --skip-untracked --disable-bump-commit
+
+          # Get new tag
+          new_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          # Push new tag if different
+          if [ "$current_tag" != "$new_tag" ] && [ -n "$new_tag" ]; then
+            git push origin $new_tag
+          fi
