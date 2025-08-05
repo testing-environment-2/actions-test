@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - master
   workflow_dispatch:
 
 jobs:
@@ -21,43 +22,64 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
           token: ${{ steps.app-token.outputs.token }}
-
-      - name: Install cocogitto
-        uses: cocogitto/cocogitto-action@v3
-        with:
-          check: false
 
       - name: Configure git
         run: |
           git config user.name 'your-app-name[bot]'
           git config user.email 'your-app-id+your-app-name[bot]@users.noreply.github.com'
 
+      - name: Install cocogitto
+        uses: cocogitto/cocogitto-action@v3
+        with:
+          check: false
+
+      - name: Initialize cocogitto if needed
+        run: |
+          if [ ! -f "cog.toml" ]; then
+            echo "⚠️ No cog.toml found. Initializing cocogitto..."
+            cog init
+            git add cog.toml
+            git commit -m "chore: initialize cocogitto configuration"
+            git push origin main
+          fi
+
       - name: Bump version
         id: bump
         run: |
-          # Check if there are any conventional commits since last tag
-          if cog check --from-latest-tag; then
-            # Bump version based on conventional commits
-            cog bump --auto
-
-            # Get the new version
-            # test
-            VERSION=$(cog get-version)
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          # Check if any tags exist
+          if [ -z "$(git tag -l)" ]; then
+            echo "⚠️ No tags found. Creating initial tag..."
+            # Create initial tag if none exists
+            git tag 0.1.0
+            git push origin 0.1.0
+            echo "version=0.1.0" >> $GITHUB_OUTPUT
             echo "bumped=true" >> $GITHUB_OUTPUT
-
-            # Create and push tag
-            git push origin main --tags
-
-            echo "✅ Bumped version to $VERSION"
+            echo "✅ Created initial tag 0.1.0"
           else
-            echo "❌ No conventional commits found since last tag"
-            echo "bumped=false" >> $GITHUB_OUTPUT
+            # Check if there are any conventional commits since last tag
+            if cog check --from-latest-tag; then
+              # Bump version based on conventional commits
+              cog bump --auto
+
+              # Get the new version
+              VERSION=$(cog get-version)
+              echo "version=$VERSION" >> $GITHUB_OUTPUT
+              echo "bumped=true" >> $GITHUB_OUTPUT
+
+              # Create and push tag
+              git push origin main --tags
+
+              echo "✅ Bumped version to $VERSION"
+            else
+              echo "❌ No conventional commits found since last tag"
+              echo "bumped=false" >> $GITHUB_OUTPUT
+            fi
           fi
 
       - name: Create Release (Optional)
-        if: steps.bump.outputs.bumped == 'true'
+        if: steps.bump.outputs.bumped == 'true' && steps.bump.outputs.version != '0.1.0'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.bump.outputs.version }}
