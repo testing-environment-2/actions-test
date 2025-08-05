@@ -1,7 +1,7 @@
 name: Bump semver git tag
 
 on:
-    workflow_call:
+  push:
 
 jobs:
   bump_semver_git_tag:
@@ -16,7 +16,7 @@ jobs:
         with:
             app-id: ${{ vars.APP_ID }}
             private-key: ${{ secrets.APP_PRIVATE_KEY }}
-            owner: tunedd
+            owner: testing-environment-2
 
       - name: Checkout repository
         uses: actions/checkout@v4
