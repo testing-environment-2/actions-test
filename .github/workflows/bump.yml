@@ -6,6 +6,9 @@ on:
 jobs:
   bump_semver_git_tag:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cocogitto/cog:latest
+      options: --user root
 
     steps:
       - name: Set up access token
@@ -22,12 +25,6 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
           token: ${{ steps.app-token.outputs.token }}
-
-      - name: Install cocogitto
-        run: |
-          curl -L -o cog.tar.gz https://github.com/cocogitto/cocogitto/releases/latest/download/cocogitto-5.6.0-x86_64-unknown-linux-musl.tar.gz
-          tar -xzf cog.tar.gz
-          sudo mv cog /usr/local/bin/
 
       - name: Bump version and create tag
         env:
