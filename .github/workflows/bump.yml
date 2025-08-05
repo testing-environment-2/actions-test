@@ -1,0 +1,52 @@
+name: Bump semver git tag
+
+on:
+    workflow_call:
+
+jobs:
+  bump_semver_git_tag:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cocogitto/cog:latest
+
+    steps:
+      - name: Set up access token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+            app-id: ${{ vars.APP_ID }}
+            private-key: ${{ secrets.APP_PRIVATE_KEY }}
+            owner: tunedd
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Bump version and create tag
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          # Configure git to use app token
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          git remote set-url origin https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/tunedd/${{ github.event.repository.name }}.git
+
+          # Get current tag
+          current_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          # Run cog check from latest tag
+          cog check --from-latest-tag
+
+          # Bump version
+          cog bump --auto --skip-untracked --disable-bump-commit
+
+          # Get new tag
+          new_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          # Push new tag if different
+          if [ "$current_tag" != "$new_tag" ] && [ -n "$new_tag" ]; then
+            git push origin $new_tag
+          fi
