@@ -42,6 +42,7 @@ jobs:
             cog bump --auto
 
             # Get the new version
+            # test
             VERSION=$(cog get-version)
             echo "version=$VERSION" >> $GITHUB_OUTPUT
             echo "bumped=true" >> $GITHUB_OUTPUT
