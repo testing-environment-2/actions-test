@@ -1,54 +1,64 @@
-name: Bump semver git tag
+name: Bump Version
 
 on:
   push:
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
-  bump_semver_git_tag:
+  bump-version:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/cocogitto/cog:latest
-      options: --user root
-
     steps:
-      - name: Set up access token
+      - name: Generate GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v2
+        uses: tibdex/github-app-token@v2
         with:
-            app-id: ${{ vars.APP_ID }}
-            private-key: ${{ secrets.APP_PRIVATE_KEY }}
-            owner: testing-environment-2
+          app_id: ${{ vars.APP_ID }}
+          private_key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          fetch-tags: true
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Bump version and create tag
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+      - name: Install cocogitto
+        uses: cocogitto/cocogitto-action@v3
+        with:
+          check: false
+
+      - name: Configure git
         run: |
-          # Configure git to use app token
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name 'your-app-name[bot]'
+          git config user.email 'your-app-id+your-app-name[bot]@users.noreply.github.com'
 
-          git remote set-url origin https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/tunedd/${{ github.event.repository.name }}.git
+      - name: Bump version
+        id: bump
+        run: |
+          # Check if there are any conventional commits since last tag
+          if cog check --from-latest-tag; then
+            # Bump version based on conventional commits
+            cog bump --auto
 
-          # Get current tag
-          current_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+            # Get the new version
+            VERSION=$(cog get-version)
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "bumped=true" >> $GITHUB_OUTPUT
 
-          # Run cog check from latest tag
-          cog check --from-latest-tag
+            # Create and push tag
+            git push origin main --tags
 
-          # Bump version
-          cog bump --auto --skip-untracked --disable-bump-commit
-
-          # Get new tag
-          new_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-
-          # Push new tag if different
-          if [ "$current_tag" != "$new_tag" ] && [ -n "$new_tag" ]; then
-            git push origin $new_tag
+            echo "✅ Bumped version to $VERSION"
+          else
+            echo "❌ No conventional commits found since last tag"
+            echo "bumped=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Create Release (Optional)
+        if: steps.bump.outputs.bumped == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.bump.outputs.version }}
+          generate_release_notes: true
+          token: ${{ steps.app-token.outputs.token }}
