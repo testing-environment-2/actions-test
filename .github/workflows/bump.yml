@@ -1,88 +1,44 @@
-name: Bump Version
+name: Bump semver git tag
 
 on:
   push:
-    branches:
-      - main
-      - master
-  workflow_dispatch:
 
 jobs:
-  bump-version:
+  bump_semver_git_tag:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cocogitto/cog:latest
+
     steps:
-      - name: Generate GitHub App token
+      - name: Set up access token
         id: app-token
-        uses: tibdex/github-app-token@v2
+        uses: actions/create-github-app-token@v2
         with:
-          app_id: ${{ vars.APP_ID }}
-          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+            app-id: ${{ vars.APP_ID }}
+            private-key: ${{ secrets.APP_PRIVATE_KEY }}
+            owner: testing-environment-2
 
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          fetch-tags: true
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Configure git
+      - name: Bump version and create tag
         run: |
-          # Important change
-          git config user.name 'your-app-name[bot]'
-          git config user.email 'your-app-id+your-app-name[bot]@users.noreply.github.com'
+          # Get current tag
+          current_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
-      - name: Install cocogitto
-        uses: cocogitto/cocogitto-action@v3
-        with:
-          check: false
+          # Run cog check from latest tag
+          cog check --from-latest-tag
 
-      - name: Initialize cocogitto if needed
-        run: |
-          if [ ! -f "cog.toml" ]; then
-            echo "⚠️ No cog.toml found. Initializing cocogitto..."
-            cog init
-            git add cog.toml
-            git commit -m "chore: initialize cocogitto configuration"
-            git push origin main
+          # Bump version
+          cog bump --auto --skip-untracked --disable-bump-commit
+
+          # Get new tag
+          new_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          # Push new tag if different
+          if [ "$current_tag" != "$new_tag" ] && [ -n "$new_tag" ]; then
+            git push origin $new_tag
           fi
-
-      - name: Bump version
-        id: bump
-        run: |
-          # Check if any tags exist
-          if [ -z "$(git tag -l)" ]; then
-            echo "⚠️ No tags found. Creating initial tag..."
-            # Create initial tag if none exists
-            git tag 0.1.0
-            git push origin 0.1.0
-            echo "version=0.1.0" >> $GITHUB_OUTPUT
-            echo "bumped=true" >> $GITHUB_OUTPUT
-            echo "✅ Created initial tag 0.1.0"
-          else
-            # Check if there are any conventional commits since last tag
-            if cog check --from-latest-tag; then
-              # Bump version based on conventional commits
-              cog bump --auto
-
-              # Get the new version
-              VERSION=$(cog get-version)
-              echo "version=$VERSION" >> $GITHUB_OUTPUT
-              echo "bumped=true" >> $GITHUB_OUTPUT
-
-              # Create and push tag
-              git push origin main --tags
-
-              echo "✅ Bumped version to $VERSION"
-            else
-              echo "❌ No conventional commits found since last tag"
-              echo "bumped=false" >> $GITHUB_OUTPUT
-            fi
-          fi
-
-      - name: Create Release (Optional)
-        if: steps.bump.outputs.bumped == 'true' && steps.bump.outputs.version != '0.1.0'
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ steps.bump.outputs.version }}
-          generate_release_notes: true
-          token: ${{ steps.app-token.outputs.token }}
